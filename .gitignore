@@ -48,6 +48,5 @@ bin/
 out
 gen
 .gradle
-build.gradle
 build
 application-oauth.properties
