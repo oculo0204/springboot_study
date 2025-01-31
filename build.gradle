@@ -40,6 +40,8 @@ dependencies {
     // Spring Security Test 추가
     testImplementation 'org.springframework.boot:spring-boot-starter-security'
     testImplementation 'org.springframework.security:spring-security-test'
+    // MariaDB JDBC 클라이언트 추가
+    implementation 'org.mariadb.jdbc:mariadb-java-client'
 }
 
 tasks.withType(JavaCompile) {
