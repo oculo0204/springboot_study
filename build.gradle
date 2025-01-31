@@ -43,17 +43,7 @@ dependencies {
     // MariaDB JDBC 클라이언트 추가
     implementation 'org.mariadb.jdbc:mariadb-java-client'
 }
-
-// mainClassName을 설정하여 메인 클래스를 지정합니다.
-springBoot {
-    mainClassName = 'com.ulbbang.book.firstproject.Application'  // 실제 메인 클래스 경로를 입력하세요.
-}
-
-// plain.jar 생성을 비활성화
-jar {
-    enabled = false  // plain.jar 생성을 비활성화
-}
-
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
 }
+
