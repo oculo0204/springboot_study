@@ -2,7 +2,7 @@ name: dev branch auto ci process script
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
 
 jobs:
   deploy:
