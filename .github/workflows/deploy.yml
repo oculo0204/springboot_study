@@ -1,26 +1,74 @@
 name: dev branch auto ci process script
 
-on: # 아래 job을 실행시킬 상황
+on:
   push:
-    branches: [ dev ]
+    branches: [dev]
 
 jobs:
   deploy:
     name: deploy
-    runs-on: ubuntu-latest # 실행될 인스턴스 OS와 버전
+    runs-on: ubuntu-latest  # GitHub Actions가 실행될 환경 (우분투)
 
     steps:
-      - name: excuting remote ssh commands
-        uses: appleboy/ssh-action@v0.1.6 # ssh 접속하는 오픈소스
+      - name: Checkout code
+        uses: actions/checkout@v2  # 레포지토리의 코드를 GitHub Actions 환경에 체크아웃
+
+      - name: Set up SSH keys
+        uses: webfactory/ssh-agent@v0.5.3  # SSH 키를 설정하는 액션
         with:
-          host: ${{ secrets.REMOTE_IP }} # 인스턴스 IP
-          username: ${{ secrets.REMOTE_USER }} # 우분투 아이디
-          key: ${{ secrets.REMOTE_PRIVATE_KEY }} # ec2 instance pem key
-          port: ${{ secrets.REMOTE_SSH_PORT }} # 접속포트
-          script: | # 실행할 스크립트
-            cd /home/ubuntu/Server-V2
+          ssh-private-key: ${{ secrets.REMOTE_PRIVATE_KEY }}  # GitHub Secrets에서 SSH 개인 키를 가져옴
+
+      - name: Execute deploy script on EC2
+        uses: appleboy/ssh-action@v0.1.6  # SSH를 통해 EC2에 접속하는 액션
+        with:
+          host: ${{ secrets.REMOTE_IP }}  # EC2의 IP 주소
+          username: ec2-user  # EC2의 사용자명 (Amazon Linux AMI에서는 보통 `ec2-user`)
+          key: ${{ secrets.REMOTE_PRIVATE_KEY }}  # EC2 접속을 위한 SSH 키 (GitHub Secrets)
+          port: ${{ secrets.REMOTE_SSH_PORT }}  # SSH 포트 (기본적으로 22번 포트)
+          script: |
+            #! /bin/bash
+            REPOSITORY=/home/ec2-user/app/step1
+            PROJECT_NAME=springboot_study
+            EC2_HOST_NAME=springboot-first
+
+            # 프로젝트 디렉토리로 이동
+            echo "> Git Pull"
+            cd $REPOSITORY/$PROJECT_NAME/
             git pull origin dev
-            pm2 kill
-            npm i --force
-            npm run build
-            pm2 start dist/main.js
+
+            # Gradle 빌드
+            echo "> Gradle 빌드 시작"
+            ./gradlew bootJar || { echo "Gradle 빌드 실패"; exit 1; }
+
+            # step1 디렉토리로 이동
+            echo "> step1 디렉토리로 이동"
+            cd $REPOSITORY
+
+            # 빌드 파일 복사
+            echo "> Build 파일 복사"
+            cp $REPOSITORY/$PROJECT_NAME/build/libs/*.jar $REPOSITORY/ || { echo "JAR 파일 복사 실패"; exit 1; }
+
+            # 현재 실행 중인 애플리케이션 pid 확인
+            echo "> 현재 구동중인 애플리케이션 pid 확인"
+            CURRENT_PID=$(pgrep -f ${EC2_HOST_NAME}.*.jar)
+            echo "현재 구동 중인 애플리케이션 pid : $CURRENT_PID"
+
+            # 구동 중인 애플리케이션 종료
+            if [ -z "$CURRENT_PID" ]; then
+                echo "> 현재 구동 중인 애플리케이션이 없으므로 종료하지 않습니다."
+            else
+                echo "> kill -15 $CURRENT_PID"
+                sudo kill -15 $CURRENT_PID
+                sleep 5
+            fi
+
+            # 새 애플리케이션 배포
+            echo "> 새 애플리케이션 배포"
+            JAR_NAME=$(ls -tr $REPOSITORY/ | grep jar | tail -n 1)
+            echo "> JAR Name: $JAR_NAME"
+
+            # nohup으로 새 애플리케이션 실행
+            nohup java -jar \
+              -Dspring.config.location=classpath:/application.properties,/home/ec2-user/app/application-real-db.properties,/home/ec2-user/app/application-oauth.properties,classpath:/application-real.properties \
+              -Dspring.profiles.active=real \
+              $REPOSITORY/$JAR_NAME 2>&1 &
